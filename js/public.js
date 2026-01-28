@@ -16,7 +16,7 @@ const emptyState = document.getElementById("emptyState");
 const catSelect = document.getElementById("catSelect");
 const searchInput = document.getElementById("searchInput");
 
-let allCards = []; // {id, category, side, order, storagePath}
+let allCards = [];
 let categorySet = new Set();
 let selectedCat = "__all__";
 let qText = "";
@@ -30,7 +30,6 @@ searchInput.addEventListener("input", () => {
   render();
 });
 
-// Firestore collection name
 const col = collection(db, "card_templates");
 const q = query(col, orderBy("order", "asc"));
 
@@ -43,7 +42,7 @@ onSnapshot(q, (snap) => {
     if (d?.deleted) return;
 
     const category = (d.category || "").trim();
-    const side = (d.side || "").trim(); // front/back
+    const side = (d.side || "").trim();
     const order = Number(d.order);
 
     if (!category || !side || !Number.isFinite(order)) return;
@@ -66,7 +65,9 @@ onSnapshot(q, (snap) => {
 function rebuildCatOptions(){
   const cats = [...categorySet].sort((a,b)=>a.localeCompare(b));
   const cur = catSelect.value || "__all__";
-  catSelect.innerHTML = `<option value="__all__">ทุกหมวด</option>` + cats.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+  catSelect.innerHTML =
+    `<option value="__all__">ทุกหมวด</option>` +
+    cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join("");
   catSelect.value = cats.includes(cur) ? cur : "__all__";
   selectedCat = catSelect.value;
 }
@@ -79,8 +80,7 @@ function render(){
     return hay.includes(qText);
   });
 
-  // Pairing rule: same category + same order => one row with front/back
-  const pairMap = new Map(); // key => {category, order, front?, back?}
+  const pairMap = new Map();
   for (const c of filtered){
     const key = `${c.category}__${c.order}`;
     if (!pairMap.has(key)){
@@ -112,52 +112,38 @@ function renderPair(p){
   row.innerHTML = `
     <div class="pairHead">
       <div class="pairMeta">
-        <div class="badge"><span class="muted">Category</span> ${escapeHtml(p.category)}</div>
-        <div class="badge"><span class="muted">Order</span> ${escapeHtml(String(p.order))}</div>
+        <div class="badge"><span class="muted">Category</span> ${esc(p.category)}</div>
+        <div class="badge"><span class="muted">Order</span> ${esc(String(p.order))}</div>
       </div>
     </div>
 
     <div class="cards2">
-      ${renderCardSlotHtml("Front", p.front)}
-      ${renderCardSlotHtml("Back", p.back)}
+      ${renderCardSlot("Front", p.front)}
+      ${renderCardSlot("Back", p.back)}
     </div>
   `;
-
-
 
   return row;
 }
 
-function renderCardSlotHtml(label, card){
-  const has = !!card?.storagePath;
-  const side = card?.side || "";
-  const title = `${label}`;
-
-  if (!has){
+function renderCardSlot(label, card){
+  if (!card?.storagePath){
     return `
       <div class="cardSlot">
         <div class="cardStage">
-          <div class="placeholder">NO ${escapeHtml(label.toUpperCase())}</div>
+          <div class="placeholder">NO ${esc(label.toUpperCase())}</div>
         </div>
-<!-- downloadRow removed -->
       </div>
     `;
   }
 
-  // Use Storage path -> getDownloadURL at click time (faster initial)
-  // But we want preview now: we will embed a lazy preview by fetching URL once per render.
   const imgId = `img_${card.id}`;
-  // placeholder img; we'll resolve later
   setTimeout(()=>hydrateImage(imgId, card.storagePath), 0);
 
   return `
     <div class="cardSlot">
       <div class="cardStage">
-        <img id="${imgId}" alt="${escapeHtml(card.category)} ${escapeHtml(side)}" loading="lazy" />
-      </div>
-      <div class="downloadRow">
-        <div class="smallMuted">${escapeHtml(title)}</div>
-        <button class="dlBtn" data-dl="${escapeHtml(card.id)}">Download PNG</button>
+        <img id="${imgId}" alt="${esc(card.category)} ${esc(card.side)}" loading="lazy" />
       </div>
     </div>
   `;
@@ -174,39 +160,10 @@ async function hydrateImage(imgId, storagePath){
       urlCache.set(storagePath, url);
     }
     img.src = url;
-  } catch(e){
-    // ignore
-  }
+  } catch(e){}
 }
 
-async function downloadPngFromStorage(card){
-  const r = sRef(storage, card.storagePath);
-  const url = await getDownloadURL(r);
-  const resp = await fetch(url);
-  const blob = await resp.blob();
-
-  const safeCat = slug(card.category);
-  const filename = `${safeCat}_order-${card.order}_${card.side}.png`;
-
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-
-  setTimeout(()=>URL.revokeObjectURL(a.href), 8000);
-}
-
-function slug(s){
-  return (s||"category").toString()
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g,"-")
-    .replace(/[^a-z0-9\-_.]/g,"")
-    .slice(0,60) || "category";
-}
-function escapeHtml(s){
+function esc(s){
   return (s ?? "").toString()
     .replaceAll("&","&amp;")
     .replaceAll("<","&lt;")
