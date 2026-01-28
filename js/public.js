@@ -123,24 +123,7 @@ function renderPair(p){
     </div>
   `;
 
-  // wire download buttons
-  const buttons = row.querySelectorAll("[data-dl]");
-  buttons.forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const id = btn.getAttribute("data-dl");
-      const card = [p.front, p.back].find(x => x?.id === id);
-      if (!card) return;
-      btn.disabled = true;
-      const oldText = btn.textContent;
-      btn.textContent = "Downloading...";
-      try{
-        await downloadPngFromStorage(card);
-      } finally {
-        btn.disabled = false;
-        btn.textContent = oldText;
-      }
-    });
-  });
+
 
   return row;
 }
@@ -156,7 +139,7 @@ function renderCardSlotHtml(label, card){
         <div class="cardStage">
           <div class="placeholder">NO ${escapeHtml(label.toUpperCase())}</div>
         </div>
- 
+<!-- downloadRow removed -->
       </div>
     `;
   }
@@ -199,19 +182,21 @@ async function hydrateImage(imgId, storagePath){
 async function downloadPngFromStorage(card){
   const r = sRef(storage, card.storagePath);
   const url = await getDownloadURL(r);
+  const resp = await fetch(url);
+  const blob = await resp.blob();
 
   const safeCat = slug(card.category);
   const filename = `${safeCat}_order-${card.order}_${card.side}.png`;
 
   const a = document.createElement("a");
-  a.href = url;
+  a.href = URL.createObjectURL(blob);
   a.download = filename;
-  a.target = "_blank"; // กัน browser บางตัวงอแง
   document.body.appendChild(a);
   a.click();
   a.remove();
-}
 
+  setTimeout(()=>URL.revokeObjectURL(a.href), 8000);
+}
 
 function slug(s){
   return (s||"category").toString()
